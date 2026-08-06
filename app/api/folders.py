@@ -10,10 +10,11 @@ from fastapi import APIRouter, Depends, Query, status
 
 from app.auth.dependencies import get_current_user
 from app.auth.models import AuthUser
-from app.api.dependencies import get_folder_service
+from app.api.dependencies import get_folder_service, get_notification_service
 from app.schemas.file import FileResponse
 from app.schemas.folder import FolderCreateRequest
 from app.services.folder_service import FolderService
+from app.services.notification_service import NotificationService
 
 router = APIRouter(tags=["folders"])
 
@@ -46,10 +47,12 @@ async def create_folder(
     body: FolderCreateRequest,
     user: AuthUser = Depends(get_current_user),
     folders: FolderService = Depends(get_folder_service),
+    notifications: NotificationService = Depends(get_notification_service),
 ) -> FileResponse:
     record = await folders.create_folder(
         owner_id=user.uid, name=body.name, parent_folder_id=body.parent_folder_id
     )
+    await notifications.item_created(user.uid, record)
     return FileResponse.model_validate(record)
 
 
@@ -77,8 +80,11 @@ async def restore_item(
     item_id: str,
     user: AuthUser = Depends(get_current_user),
     folders: FolderService = Depends(get_folder_service),
+    notifications: NotificationService = Depends(get_notification_service),
 ) -> None:
     await folders.restore(user.uid, item_id)
+    record = await folders.get_item(user.uid, item_id)
+    await notifications.item_restored(user.uid, record)
 
 
 @router.delete("/recycle-bin/{item_id}", status_code=status.HTTP_204_NO_CONTENT)

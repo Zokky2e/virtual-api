@@ -13,13 +13,18 @@ import mimetypes
 
 from fastapi import APIRouter, Depends, Response, UploadFile, status
 
-from app.api.dependencies import get_file_service, get_folder_service
+from app.api.dependencies import (
+    get_file_service,
+    get_folder_service,
+    get_notification_service,
+)
 from app.auth.dependencies import get_current_user
 from app.auth.models import AuthUser
 from app.schemas.file import FileResponse
 from app.schemas.folder import MoveRequest, RenameRequest
 from app.services.file_service import FileService
 from app.services.folder_service import FolderService
+from app.services.notification_service import NotificationService
 
 router = APIRouter(tags=["files"])
 
@@ -35,6 +40,7 @@ async def upload_file(
     parent_folder_id: str | None = None,
     user: AuthUser = Depends(get_current_user),
     files: FileService = Depends(get_file_service),
+    notifications: NotificationService = Depends(get_notification_service),
 ) -> FileResponse:
     async def chunks():
         while True:
@@ -50,6 +56,7 @@ async def upload_file(
         parent_folder_id=parent_folder_id,
         stream=chunks(),
     )
+    await notifications.item_created(user.uid, record)
     return FileResponse.model_validate(record)
 
 
@@ -84,8 +91,10 @@ async def rename_item(
     body: RenameRequest,
     user: AuthUser = Depends(get_current_user),
     folders: FolderService = Depends(get_folder_service),
+    notifications: NotificationService = Depends(get_notification_service),
 ) -> FileResponse:
     record = await folders.rename(user.uid, item_id, body.name)
+    await notifications.item_renamed(user.uid, record)
     return FileResponse.model_validate(record)
 
 
@@ -94,8 +103,15 @@ async def move_item(
     body: MoveRequest,
     user: AuthUser = Depends(get_current_user),
     folders: FolderService = Depends(get_folder_service),
+    notifications: NotificationService = Depends(get_notification_service),
 ) -> FileResponse:
+    # Captured before the move so the notification can tell clients which
+    # folder to remove the item from, not just which one to add it to.
+    previous = await folders.get_item(user.uid, body.item_id)
+    old_parent_folder_id = previous.parent_folder_id
+
     record = await folders.move(user.uid, body.item_id, body.parent_folder_id)
+    await notifications.item_moved(user.uid, record, old_parent_folder_id)
     return FileResponse.model_validate(record)
 
 
@@ -104,7 +120,10 @@ async def delete_item(
     item_id: str,
     user: AuthUser = Depends(get_current_user),
     folders: FolderService = Depends(get_folder_service),
+    notifications: NotificationService = Depends(get_notification_service),
 ) -> None:
     """Soft delete — moves the item to the recycle bin. Permanent delete
     is DELETE /recycle-bin/{id} in api/folders.py."""
+    record = await folders.get_item(user.uid, item_id)
     await folders.soft_delete(user.uid, item_id)
+    await notifications.item_deleted(user.uid, record)

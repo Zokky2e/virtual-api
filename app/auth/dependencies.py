@@ -8,7 +8,7 @@ ever accept owner_id as a client-supplied query/body param instead.
 
 from __future__ import annotations
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Query
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.auth.firebase import TokenVerificationError, verify_id_token

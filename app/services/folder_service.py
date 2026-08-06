@@ -8,6 +8,7 @@ separation as the client.
 """
 
 from __future__ import annotations
+from pathlib import Path
 
 from app.database.models import FileRecord
 from app.database.repositories import FileRepository
@@ -48,6 +49,10 @@ class FolderService:
 
     async def rename(self, owner_id: str, item_id: str, new_name: str) -> FileRecord:
         record = await self.get_item(owner_id, item_id)
+        # Preserve extension if none was provided
+        if "." not in Path(new_name).name:
+            extension = "".join(Path(record.name).suffixes)
+            new_name = f"{new_name}{extension}"
         if new_name != record.name and await self._repo.name_exists_in_folder(
             owner_id, record.parent_folder_id, new_name
         ):

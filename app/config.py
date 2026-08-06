@@ -31,8 +31,10 @@ class Settings(BaseSettings):
     database_path: Path = Path("./data/virtual_desktop.db")
 
     # --- CORS ---
+    cors_allow_origins: str = ""
+    cors_allow_origin_regex: str | None = r"http://localhost:\d+"
     # Comma-separated origins in .env, e.g. "https://app.example.com,http://localhost:5000"
-    cors_allow_origins: str = "http://locahost:\\d+"
+    cors_allow_origins: str = "http://localhost:5000"
 
     @property
     def cors_origins_list(self) -> list[str]:

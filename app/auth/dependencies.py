@@ -41,3 +41,35 @@ async def get_current_user(
         email=claims.get("email"),
         email_verified=claims.get("email_verified", False),
     )
+
+async def get_current_user_header_or_query(
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme),
+    token: str | None = Query(default=None),
+) -> AuthUser:
+    """
+    Same verification as get_current_user, but also accepts the ID token
+    as `?token=` — mirrors the /ws handshake workaround. Used only by
+    /download and /stream, since Image.network, VideoPlayerController,
+    and the PDF viewer's <iframe> on the Flutter client can't attach a
+    custom Authorization header.
+    """
+    raw_token = credentials.credentials if credentials else token
+    if not raw_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing bearer token.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    try:
+        claims = verify_id_token(raw_token)
+    except TokenVerificationError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token.",
+            headers={"WWW-Authenticate": "Bearer"},
+        ) from None
+    return AuthUser(
+        uid=claims["uid"],
+        email=claims.get("email"),
+        email_verified=claims.get("email_verified", False),
+    )

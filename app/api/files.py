@@ -18,7 +18,7 @@ from app.api.dependencies import (
     get_folder_service,
     get_notification_service,
 )
-from app.auth.dependencies import get_current_user
+from app.auth.dependencies import get_current_user_header_or_query, get_current_user
 from app.auth.models import AuthUser
 from app.schemas.file import FileResponse
 from app.schemas.folder import MoveRequest, RenameRequest
@@ -73,7 +73,7 @@ async def get_item(
 @router.get("/download/{item_id}")
 async def download_file(
     item_id: str,
-    user: AuthUser = Depends(get_current_user),
+    user: AuthUser = Depends(get_current_user_header_or_query),
     files: FileService = Depends(get_file_service),
 ) -> Response:
     record, data = await files.download(user.uid, item_id)

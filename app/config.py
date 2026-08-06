@@ -32,7 +32,7 @@ class Settings(BaseSettings):
 
     # --- CORS ---
     # Comma-separated origins in .env, e.g. "https://app.example.com,http://localhost:5000"
-    cors_allow_origins: str = "http://localhost:5000"
+    cors_allow_origins: str = "http://locahost:\\d+"
 
     @property
     def cors_origins_list(self) -> list[str]:

@@ -24,7 +24,7 @@ from app.services.stream_service import StreamService
 from app.storage.base import StorageRepository
 from app.storage.local_storage import LocalFileStorage
 from app.websocket.manager import manager as connection_manager
-
+from app.services.reconcile_service import ReconcileService
 
 @lru_cache
 def get_storage() -> StorageRepository:
@@ -68,3 +68,8 @@ def get_notification_service() -> NotificationService:
     # websocket/manager.py) — every request shares the same one, unlike
     # get_file_repository which is fresh per-request.
     return NotificationService(connection_manager)
+
+def get_reconcile_service(
+    repo: FileRepository = Depends(get_file_repository),
+) -> ReconcileService:
+    return ReconcileService(repo, get_settings().storage_root)

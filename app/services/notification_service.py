@@ -60,3 +60,11 @@ class NotificationService:
             owner_id,
             build_event(event, item_id=record.id, parent_folder_id=record.parent_folder_id),
         )
+
+    async def shared_item_changed(self, event: str, record: "FileRecord") -> None:
+        """Like item_created/item_moved/etc. but for the shared folder —
+        broadcasts to all connected users, not just SHARED_OWNER_ID's own
+        (nonexistent) sockets."""
+        await self._manager.broadcast_all(
+            build_event(event, item_id=record.id, parent_folder_id=record.parent_folder_id)
+        )

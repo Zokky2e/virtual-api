@@ -189,3 +189,13 @@ class FileRepository:
                 return False
             current = record.parent_folder_id
         return False
+
+    async def list_storage_keys(self, owner_id: str) -> set[str]:
+        """All storage_keys currently tracked for this owner — used by
+        ReconcileService to figure out which on-disk files are untracked."""
+        stmt = select(FileRecord.storage_key).where(
+            FileRecord.owner_id == owner_id,
+            FileRecord.storage_key.is_not(None),
+        )
+        result = await self._session.execute(stmt)
+        return {row[0] for row in result.all()}

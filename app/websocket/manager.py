@@ -47,5 +47,18 @@ class ConnectionManager:
         for ws in stale:
             connections.discard(ws)
 
+    async def broadcast_all(self, message: dict) -> None:
+        """Send `message` to every connection across every owner — used for
+        shared-folder events, which every connected user should see
+        regardless of whose uid they're authenticated as."""
+        for owner_id, connections in list(self._connections.items()):
+            stale: list[WebSocket] = []
+            for ws in connections:
+                try:
+                    await ws.send_json(message)
+                except Exception:
+                    stale.append(ws)
+            for ws in stale:
+                connections.discard(ws)
 
 manager = ConnectionManager()

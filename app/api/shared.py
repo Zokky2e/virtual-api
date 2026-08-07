@@ -180,3 +180,17 @@ async def search_shared(
 ) -> list[FileResponse]:
     items = await folders.search(SHARED_OWNER_ID, q)
     return [FileResponse.model_validate(i) for i in items]
+
+@router.post("/sync", response_model=list[FileResponse])
+async def sync_shared_storage(
+    _: AuthUser = Depends(get_current_user),
+    reconcile: ReconcileService = Depends(get_reconcile_service),
+    notifications: NotificationService = Depends(get_notification_service),
+) -> list[FileResponse]:
+    """Same reconciliation as the per-user /desktop/sync, but scanning
+    storage_root/users/shared/ — pick up anything scp'd or downloaded
+    directly on the server into the shared drop zone."""
+    records = await reconcile.reconcile_user(SHARED_OWNER_ID)
+    for record in records:
+        await notifications.shared_item_changed("file_created", record)
+    return [FileResponse.model_validate(r) for r in records]

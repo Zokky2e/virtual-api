@@ -63,6 +63,20 @@ async def list_shared_folder(
     return [FileResponse.model_validate(i) for i in items]
 
 
+@router.get("/file/{item_id}", response_model=FileResponse)
+async def get_shared_item(
+    item_id: str,
+    _: AuthUser = Depends(get_current_user),
+    folders: FolderService = Depends(get_folder_service),
+) -> FileResponse:
+    """Mirrors files.py's get_item — needed because
+    ApiFileSystemRepository.createFile() re-fetches an item's metadata by
+    id right after upload (see that method's docstring). Without this,
+    uploading into the shared tree reports a spurious failure even though
+    the file and its record are created correctly."""
+    record = await folders.get_item(SHARED_OWNER_ID, item_id)
+    return FileResponse.model_validate(record)
+
 @router.post("/folder", response_model=FileResponse, status_code=status.HTTP_201_CREATED)
 async def create_shared_folder(
     body: FolderCreateRequest,

@@ -65,7 +65,7 @@ class ReconcileService:
                 owner_id=owner_id,
                 name=path.name,
                 parent_folder_id=parent_folder_id,
-                type_=type_from_mime(mime_type or "application/octet-stream"),
+                type_=type_from_mime(mime_type or "application/octet-stream", path.name),
                 storage_key=storage_key,
                 size=path.stat().st_size,
             )

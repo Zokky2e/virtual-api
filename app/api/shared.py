@@ -206,5 +206,7 @@ async def sync_shared_storage(
     directly on the server into the shared drop zone."""
     records = await reconcile.reconcile_user(SHARED_OWNER_ID)
     for record in records:
-        await notifications.shared_item_changed("file_created", record)
+        await notifications.shared_item_changed(
+			"folder_created" if record.is_folder else "file_created", record
+		)
     return [FileResponse.model_validate(r) for r in records]

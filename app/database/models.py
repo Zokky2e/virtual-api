@@ -35,6 +35,7 @@ class FileType(str, enum.Enum):
     text = "text"
     json = "json"
     markdown = "markdown"
+    subtitle = "subtitle"
     other = "other"
 
 

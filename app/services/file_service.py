@@ -12,13 +12,15 @@ from __future__ import annotations
 import time
 from typing import AsyncIterator
 
+from pathlib import Path
+
 from app.database.models import FileRecord, FileType
 from app.database.repositories import FileRepository
 from app.exceptions import InvalidOperationError, NotFoundError
 from app.storage.base import StorageRepository
 
 
-def type_from_mime(mime_type: str) -> FileType:
+def type_from_mime(mime_type: str, filename: str | None = None) -> FileType:
     """Mirrors UploadBloc._typeFromMime in
     lib/features/file-system/bloc/upload_bloc.dart — keep both in sync by
     hand if either gains a new type."""
@@ -34,6 +36,10 @@ def type_from_mime(mime_type: str) -> FileType:
         return FileType.json
     if mime_type == "text/markdown":
         return FileType.markdown
+    if mime_type in ("application/x-subrip", "text/vtt"):
+        return FileType.subtitle
+    if filename and Path(filename).suffix.lower() in (".srt", ".vtt"):
+        return FileType.subtitle
     if mime_type.startswith("text/"):
         return FileType.text
     return FileType.other
@@ -63,7 +69,7 @@ class FileService:
             owner_id=owner_id,
             name=name,
             parent_folder_id=parent_folder_id,
-            type_=type_from_mime(mime_type),
+            type_=type_from_mime(mime_type, name),
             storage_key=storage_key,
             size=size,
         )

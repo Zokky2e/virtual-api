@@ -1,18 +1,4 @@
 # app/services/reconcile_service.py
-"""
-Reconciliation service — scans the physical storage root for files that
-exist on disk but have no corresponding FileRecord (e.g. dropped in via
-scp, rsync, or a browser download directly on the Ubuntu server) and
-creates metadata records for them so they show up in Virtual Desktop.
-
-Storage layout convention: files live flat under
-storage_root/users/{owner_id}/... (see storage/base.py's docstring — the
-on-disk layout was never meant to mirror the desktop's folder tree).
-Anything found there without a matching storage_key in the database is
-imported into that user's root folder (parent_folder_id=None); move it
-into a subfolder afterward like any other item.
-"""
-
 from __future__ import annotations
 
 import mimetypes
@@ -36,6 +22,34 @@ class ReconcileService:
         existing_keys = await self._repo.list_storage_keys(owner_id)
         created: list[FileRecord] = []
 
+        # Relative dir path ("" == root) -> folder_id. Seeded with root.
+        folder_ids: dict[str, str | None] = {"": None}
+
+        async def ensure_folder(rel_dir: Path) -> str | None:
+            rel_str = "" if str(rel_dir) == "." else rel_dir.as_posix()
+            if rel_str in folder_ids:
+                return folder_ids[rel_str]
+
+            parent_id = await ensure_folder(rel_dir.parent)
+
+            # Reuse an existing folder of the same name under this parent
+            # instead of creating a duplicate on every sync run.
+            siblings = await self._repo.get_folder(owner_id, parent_id)
+            match = next(
+                (r for r in siblings if r.is_folder and r.name == rel_dir.name),
+                None,
+            )
+            if match is not None:
+                folder_ids[rel_str] = match.id
+                return match.id
+
+            record = await self._repo.create_folder(
+                owner_id=owner_id, name=rel_dir.name, parent_folder_id=parent_id
+            )
+            created.append(record)
+            folder_ids[rel_str] = record.id
+            return record.id
+
         for path in sorted(user_dir.rglob("*")):
             if not path.is_file():
                 continue
@@ -43,11 +57,14 @@ class ReconcileService:
             if storage_key in existing_keys:
                 continue
 
+            rel_dir = path.parent.relative_to(user_dir)
+            parent_folder_id = await ensure_folder(rel_dir)
+
             mime_type, _ = mimetypes.guess_type(path.name)
             record = await self._repo.create_file(
                 owner_id=owner_id,
                 name=path.name,
-                parent_folder_id=None,
+                parent_folder_id=parent_folder_id,
                 type_=type_from_mime(mime_type or "application/octet-stream"),
                 storage_key=storage_key,
                 size=path.stat().st_size,

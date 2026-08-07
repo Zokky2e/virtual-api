@@ -27,7 +27,7 @@ from app.api.dependencies import (
     get_reconcile_service,
     get_stream_service,
 )
-from app.auth.dependencies import get_current_user
+from app.auth.dependencies import get_current_user, get_current_user_header_or_query
 from app.auth.models import AuthUser
 from app.constants import SHARED_OWNER_ID
 from app.schemas.file import FileResponse
@@ -136,7 +136,7 @@ async def download_shared_file(
 async def stream_shared_file(
     item_id: str,
     request: Request,
-    _: AuthUser = Depends(get_current_user),
+    _: AuthUser = Depends(get_current_user_header_or_query),
     stream_service: StreamService = Depends(get_stream_service),
 ) -> StreamingResponse:
     range_header = request.headers.get("range")

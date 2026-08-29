@@ -39,6 +39,7 @@ async def upload_file(
     file: UploadFile,
     parent_folder_id: str | None = None,
     user: AuthUser = Depends(get_current_user),
+    isShared: bool = False,
     files: FileService = Depends(get_file_service),
     notifications: NotificationService = Depends(get_notification_service),
 ) -> FileResponse:
@@ -48,9 +49,9 @@ async def upload_file(
             if not chunk:
                 break
             yield chunk
-
+    owner_id = "shared" if isShared else user.uid
     record = await files.upload(
-        owner_id=user.uid,
+        owner_id= owner_id,
         name=file.filename or "unnamed",
         mime_type=file.content_type or "application/octet-stream",
         parent_folder_id=parent_folder_id,

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from fastapi import Depends, HTTPException, status, Query
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from starlette.concurrency import run_in_threadpool
 
 from app.auth.firebase import TokenVerificationError, verify_id_token
 from app.auth.models import AuthUser
@@ -28,7 +29,9 @@ async def get_current_user(
         )
 
     try:
-        claims = verify_id_token(credentials.credentials)
+        claims = await run_in_threadpool(
+            verify_id_token, credentials.credentials
+        )
     except TokenVerificationError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -61,7 +64,7 @@ async def get_current_user_header_or_query(
             headers={"WWW-Authenticate": "Bearer"},
         )
     try:
-        claims = verify_id_token(raw_token)
+        claims = await run_in_threadpool(verify_id_token, raw_token)
     except TokenVerificationError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

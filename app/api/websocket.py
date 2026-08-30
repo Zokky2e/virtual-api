@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
+from starlette.concurrency import run_in_threadpool
+
 from app.auth.firebase import TokenVerificationError, verify_id_token
 from app.websocket.manager import manager
 
@@ -23,7 +25,7 @@ _CLOSE_UNAUTHORIZED = 4401
 @router.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket, token: str) -> None:
     try:
-        claims = verify_id_token(token)
+        claims = await run_in_threadpool(verify_id_token, token)
     except TokenVerificationError:
         await websocket.close(code=_CLOSE_UNAUTHORIZED)
         return

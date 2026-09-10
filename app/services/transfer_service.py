@@ -33,11 +33,6 @@ from app.exceptions import ConflictError, InvalidOperationError, NotFoundError
 from app.storage.base import StorageRepository
 
 
-def _storage_key_for(owner_id: str, name: str) -> str:
-    """Same flat scheme FileService.upload uses."""
-    return f"users/{owner_id}/{int(time.time() * 1000)}_{name}"
-
-
 class TransferResult:
     """What the router needs in order to notify both trees: the record in
     its new home, plus where it used to live so the source tree can be
@@ -141,6 +136,23 @@ class TransferService:
                 f'"{name}" already exists in the destination folder.'
             )
 
+    async def _free_key(self, owner_id: str, name: str) -> str:
+        """A storage key under `owner_id` that nothing occupies yet, in the
+        same flat scheme FileService.upload uses.
+
+        That scheme is only millisecond-precise, and a folder's files are
+        moved back to back. Two with the same name — the same subtitle file
+        in two film folders — would get the same key, and the second would
+        overwrite the first one's bytes. So the timestamp is moved on until
+        the key is free.
+        """
+        stamp = int(time.time() * 1000)
+        while True:
+            key = f"users/{owner_id}/{stamp}_{name}"
+            if not await self._storage.exists(key):
+                return key
+            stamp += 1
+
     async def _copy_file(
         self,
         *,
@@ -152,7 +164,7 @@ class TransferService:
         if record.storage_key is None:
             raise InvalidOperationError("File has no content to copy.")
 
-        destination_key = _storage_key_for(destination_owner_id, name)
+        destination_key = await self._free_key(destination_owner_id, name)
         size = await self._storage.copy(record.storage_key, destination_key)
 
         return await self._repo.create_file(
@@ -179,10 +191,10 @@ class TransferService:
         for item in subtree:
             new_key: str | None = None
             if item.storage_key is not None:
-                old_key = item.storage_key
-                new_key = _storage_key_for(destination_owner_id, item.name)
-                await self._storage.copy(old_key, new_key)
-                await self._storage.delete(old_key)
+                new_key = await self._free_key(destination_owner_id, item.name)
+                # A rename on local disk, so a file's size doesn't change how
+                # long this takes — see StorageRepository.move.
+                await self._storage.move(item.storage_key, new_key)
 
             await self._repo.reassign_owner(
                 source_owner_id,

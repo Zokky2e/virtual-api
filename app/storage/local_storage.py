@@ -9,6 +9,7 @@ without touching anything upstream of it.
 
 from __future__ import annotations
 
+import errno
 from pathlib import Path
 from typing import AsyncIterator
 
@@ -97,6 +98,27 @@ class LocalFileStorage(StorageRepository):
                     await dst.write(chunk)
                     total += len(chunk)
         return total
+
+    async def move(self, source_key: str, destination_key: str) -> None:
+        source = self._resolve(source_key)
+        if not source.is_file():
+            raise StorageNotFoundError(f"Not found: {source_key!r}")
+        destination = self._resolve(destination_key)
+        await aiofiles.os.makedirs(destination.parent, exist_ok=True)
+
+        # Every key lives under one root, so this is normally a rename: no
+        # bytes are rewritten, and a 4 GB film moves as fast as a thumbnail.
+        # Copying it 1 MiB at a time is what made moving a large folder
+        # between trees take so long.
+        try:
+            await aiofiles.os.replace(source, destination)
+        except OSError as error:
+            if error.errno != errno.EXDEV:
+                raise
+            # Part of the root is mounted from another disk, which a rename
+            # can't cross.
+            await self.copy(source_key, destination_key)
+            await self.delete(source_key)
 
     async def delete(self, storage_key: str) -> None:
         path = self._resolve(storage_key)

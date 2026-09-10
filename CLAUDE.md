@@ -56,6 +56,8 @@ app/
     shared.py             -> /desktop/shared/* — mirrors folders.py+files.py+
                               streaming.py, but scoped to SHARED_OWNER_ID
                               instead of the caller's own uid
+    transfers.py          -> POST /desktop/transfer — the one route that
+                              touches both trees (move/copy across them)
     wallpapers.py         -> /desktop/wallpapers/* — desktop wallpapers, which
                               are NOT file-tree items: own table, own storage
                               prefix, no WebSocket events
@@ -76,6 +78,8 @@ app/
     folder_service.py
     file_service.py
     stream_service.py
+    transfer_service.py       # cross-tree move/copy: relocates bytes as well
+                                # as re-owning rows, and walks a folder's subtree
     wallpaper_service.py      # wallpaper upload/list/select + range streaming
     notification_service.py   # WebSocket broadcast wrapper used by other services
     reconcile_service.py      # scans storage_root/users/<owner>/ for files with
@@ -117,7 +121,14 @@ scripts/
   sentinel `owner_id = SHARED_OWNER_ID` instead of a real Firebase UID, via
   a separate `shared.py` router. Don't special-case "is this shared?" logic
   inside the generic per-user routers (`files.py`/`folders.py`) — that's
-  exactly what `shared.py` exists to avoid.
+  exactly what `shared.py` exists to avoid. The one operation that genuinely
+  spans both trees, moving/copying an item across them, gets its own
+  `transfers.py` for the same reason.
+- **A cross-tree move relocates bytes, not just rows.** Storage keys are
+  owner-prefixed, and `ReconcileService` treats any file under
+  `users/<owner>/` that isn't in that owner's recorded keys as untracked. Move
+  a row to another owner without moving its bytes and the next sync mints a
+  duplicate record for the orphan. `scripts/check_transfer.py` covers this.
 - **Streaming is `open_range()` + `StreamingResponse`, never full-file
   reads for video/audio.** `storage.open_range(key, start, end)` must stay
   an async generator so multi-GB files are never loaded into memory.
@@ -158,6 +169,8 @@ POST   /desktop/shared/sync                    # reconciliation import
 GET    /desktop/shared/recycle-bin             # shared tree's own bin
 POST   /desktop/shared/recycle-bin/{id}/restore
 DELETE /desktop/shared/recycle-bin/{id}        # hard delete
+
+POST   /desktop/transfer                       # move/copy between the two trees
 
 GET    /desktop/wallpapers                     # this user's wallpapers
 POST   /desktop/wallpapers/upload

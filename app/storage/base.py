@@ -13,8 +13,15 @@ FirebaseStorageService already uses. Because storage keys don't encode
 folder structure, moving an item between folders is a metadata-only
 operation (update parentFolderId in SQLite); the bytes never move. Renaming
 is the same — only the display name in metadata changes, the storage key
-stays put. That means this interface never needs a "move" or "rename"
-method, mirroring FirebaseStorageService exactly.
+stays put. That is why this interface has no "move" or "rename" method,
+mirroring FirebaseStorageService exactly.
+
+Keys *do* encode the owner, though, which is why `copy` exists. Moving an
+item between the personal and shared trees changes its owner, so its key
+has to change with it — otherwise ReconcileService, which lists the keys
+recorded for an owner and treats the rest of that owner's directory as
+untracked, would find the orphaned bytes and create a duplicate record
+for them.
 """
 
 from __future__ import annotations
@@ -72,6 +79,19 @@ class StorageRepository(abc.ABC):
         scrubbing. Callers must clamp `end` to the file's actual size
         (via `size()`) before calling this — implementations assume the
         range is already valid.
+        """
+
+    @abc.abstractmethod
+    async def copy(self, source_key: str, destination_key: str) -> int:
+        """
+        Copy the bytes at `source_key` to `destination_key`, creating any
+        parent structure needed, and return the number of bytes written.
+        Overwrites `destination_key` if it exists.
+
+        Only needed for owner-changing transfers (see the module
+        docstring). Implementations should stream rather than reading the
+        whole file into memory — these are the same multi-GB videos
+        `open_range` exists for.
         """
 
     @abc.abstractmethod

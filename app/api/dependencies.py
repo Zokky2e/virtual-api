@@ -21,6 +21,7 @@ from app.services.file_service import FileService
 from app.services.folder_service import FolderService
 from app.services.notification_service import NotificationService
 from app.services.stream_service import StreamService
+from app.services.transfer_service import TransferService
 from app.services.wallpaper_service import WallpaperService
 from app.storage.base import StorageRepository
 from app.storage.local_storage import LocalFileStorage
@@ -75,6 +76,13 @@ def get_wallpaper_service(
     storage: StorageRepository = Depends(get_storage),
 ) -> WallpaperService:
     return WallpaperService(repo, storage)
+
+
+def get_transfer_service(
+    repo: FileRepository = Depends(get_file_repository),
+    storage: StorageRepository = Depends(get_storage),
+) -> TransferService:
+    return TransferService(repo, storage)
 
 
 def get_notification_service() -> NotificationService:

@@ -78,6 +78,26 @@ class LocalFileStorage(StorageRepository):
                 remaining -= len(chunk)
                 yield chunk
 
+    async def copy(self, source_key: str, destination_key: str) -> int:
+        source = self._resolve(source_key)
+        if not source.is_file():
+            raise StorageNotFoundError(f"Not found: {source_key!r}")
+        destination = self._resolve(destination_key)
+        await aiofiles.os.makedirs(destination.parent, exist_ok=True)
+
+        # Chunked rather than read()/write() — a wallpaper and a 4 GB
+        # film go through the same path here.
+        total = 0
+        async with aiofiles.open(source, "rb") as src:
+            async with aiofiles.open(destination, "wb") as dst:
+                while True:
+                    chunk = await src.read(_CHUNK_SIZE)
+                    if not chunk:
+                        break
+                    await dst.write(chunk)
+                    total += len(chunk)
+        return total
+
     async def delete(self, storage_key: str) -> None:
         path = self._resolve(storage_key)
         try:

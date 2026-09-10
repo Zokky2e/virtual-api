@@ -190,6 +190,46 @@ class FileRepository:
             current = record.parent_folder_id
         return False
 
+    async def list_subtree(self, owner_id: str, root_id: str) -> list[FileRecord]:
+        """`root_id` plus every non-deleted descendant, parents first.
+
+        Used by a cross-tree move: the whole subtree changes owner, and
+        the parents-first order lets a caller reassign them in sequence
+        without a child ever briefly outliving its parent's ownership.
+        """
+        root = await self.get_by_id(owner_id, root_id)
+        if root is None:
+            return []
+        ordered = [root]
+        queue = [root]
+        while queue:
+            current = queue.pop(0)
+            if not current.is_folder:
+                continue
+            children = await self.get_folder(owner_id, current.id)
+            ordered.extend(children)
+            queue.extend(c for c in children if c.is_folder)
+        return ordered
+
+    async def reassign_owner(
+        self,
+        owner_id: str,
+        item_id: str,
+        *,
+        new_owner_id: str,
+        new_storage_key: str | None = None,
+    ) -> bool:
+        """Hands one record to another owner, optionally repointing it at
+        relocated bytes. The lookup is still scoped to the *current*
+        owner, so this cannot be used to grab another owner's row."""
+        record = await self.get_by_id(owner_id, item_id)
+        if record is None:
+            return False
+        record.owner_id = new_owner_id
+        if new_storage_key is not None:
+            record.storage_key = new_storage_key
+        return True
+
     async def list_storage_keys(self, owner_id: str) -> set[str]:
         """All storage_keys currently tracked for this owner — used by
         ReconcileService to figure out which on-disk files are untracked."""

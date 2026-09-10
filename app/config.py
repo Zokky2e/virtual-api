@@ -30,6 +30,22 @@ class Settings(BaseSettings):
     # --- Database ---
     database_path: Path = Path("./data/virtual_desktop.db")
 
+    # --- Streaming ---
+    # HMAC key for the item-scoped tokens the /stream endpoints accept
+    # (see auth/stream_token.py). Leave unset and a random per-process
+    # secret is used instead, which is fine for a single-worker install
+    # but means tokens don't survive a restart and can't be verified by
+    # a sibling worker — set it for anything multi-worker.
+    stream_token_secret: str | None = None
+    # Long enough that a full film never outlives its own URL, short
+    # enough that a leaked URL stops working the same day. The Firebase
+    # ID token this replaced lasted one hour, which was the bug.
+    stream_token_ttl_hours: int = 12
+
+    @property
+    def stream_token_ttl_seconds(self) -> int:
+        return self.stream_token_ttl_hours * 3600
+
     # --- CORS ---
     cors_allow_origins: str = ""
     cors_allow_origin_regex: str | None = r"http://localhost:\d+"

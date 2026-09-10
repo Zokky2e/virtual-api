@@ -138,6 +138,15 @@ scripts/
   talks to `websocket/manager.py`. Shared-tree mutations broadcast to
   *every* connected client (`broadcast_all`), not just the owning user's own
   sockets — that's intentional and differs from personal-tree events.
+- **Events go out after the commit, never before.** `NotificationService`
+  only records events; `get_notification_service` commits the request's
+  transaction and then sends them, and sends nothing if the request failed.
+  Clients re-fetch the moment an event arrives, on a connection of their own,
+  so an event that beats the commit has them read the old state with nothing
+  telling them to look again — which left folder windows stale after a
+  cross-tree move until they were reopened. Always inject it with
+  `Depends(get_notification_service)`: one constructed by hand never sends.
+  `scripts/check_event_order.py` covers this.
 - **Auth is Firebase-ID-token verification only.** `get_current_user`
   gates "is this a logged-in Virtual Desktop user"; it does not encode
   per-owner access rules beyond that — ownership checks happen in the

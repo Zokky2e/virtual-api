@@ -92,3 +92,45 @@ class FileRecord(Base):
     @property
     def is_folder(self) -> bool:
         return self.type is FileType.folder
+
+
+class WallpaperRecord(Base):
+    """
+    Desktop wallpapers — deliberately its own table, not a FileRecord row.
+
+    A wallpaper is not a file-tree item: it has no parent folder, must
+    never render as a desktop icon, and must never be swept into the tree
+    by ReconcileService. The Flutter web client used to upload wallpapers
+    through the ordinary personal-tree StorageService, which is exactly
+    why every wallpaper upload left a junk `1712345678901_photo.png` at
+    the root of the user's desktop.
+
+    Bytes live under the `wallpapers/{owner_id}/` storage prefix, outside
+    the `users/` subtree ReconcileService scans — see WallpaperService.
+
+    Mirrors lib/core/models/wallpaper_item.dart's WallpaperItem.
+    """
+
+    __tablename__ = "wallpapers"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_new_id)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+
+    owner_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+
+    # Opaque key into StorageRepository, never a filesystem path. Unlike
+    # FileRecord's, this is non-null: a wallpaper with no bytes is
+    # meaningless (there are no wallpaper "folders").
+    storage_key: Mapped[str] = mapped_column(String(512), nullable=False)
+
+    size: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    # The wallpaper currently applied. At most one row per owner is true —
+    # enforced in WallpaperRepository.set_active, which clears the others
+    # in the same transaction.
+    is_set: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
+    )

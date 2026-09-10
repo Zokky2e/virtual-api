@@ -16,11 +16,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.database.database import get_session
-from app.database.repositories import FileRepository
+from app.database.repositories import FileRepository, WallpaperRepository
 from app.services.file_service import FileService
 from app.services.folder_service import FolderService
 from app.services.notification_service import NotificationService
 from app.services.stream_service import StreamService
+from app.services.wallpaper_service import WallpaperService
 from app.storage.base import StorageRepository
 from app.storage.local_storage import LocalFileStorage
 from app.websocket.manager import manager as connection_manager
@@ -61,6 +62,19 @@ def get_stream_service(
     storage: StorageRepository = Depends(get_storage),
 ) -> StreamService:
     return StreamService(repo, storage)
+
+
+def get_wallpaper_repository(
+    session: AsyncSession = Depends(get_session),
+) -> WallpaperRepository:
+    return WallpaperRepository(session)
+
+
+def get_wallpaper_service(
+    repo: WallpaperRepository = Depends(get_wallpaper_repository),
+    storage: StorageRepository = Depends(get_storage),
+) -> WallpaperService:
+    return WallpaperService(repo, storage)
 
 
 def get_notification_service() -> NotificationService:

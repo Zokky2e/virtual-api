@@ -14,7 +14,7 @@ from __future__ import annotations
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database.models import FileRecord, FileType
+from app.database.models import FileRecord, FileType, WallpaperRecord
 
 
 class FileRepository:
@@ -199,3 +199,71 @@ class FileRepository:
         )
         result = await self._session.execute(stmt)
         return {row[0] for row in result.all()}
+
+
+class WallpaperRepository:
+    """
+    Data access for WallpaperRecord — the server-side mirror of Flutter's
+    WallpaperRepository interface (lib/core/repositories/
+    wallpaper_repository.dart). Same owner-scoping discipline as
+    FileRepository: every method takes owner_id and filters on it, so no
+    method here can return another user's rows by construction.
+    """
+
+    def __init__(self, session: AsyncSession):
+        self._session = session
+
+    async def list_for_owner(self, owner_id: str) -> list[WallpaperRecord]:
+        stmt = (
+            select(WallpaperRecord)
+            .where(WallpaperRecord.owner_id == owner_id)
+            .order_by(WallpaperRecord.created_at)
+        )
+        result = await self._session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def get_by_id(
+        self, owner_id: str, wallpaper_id: str
+    ) -> WallpaperRecord | None:
+        """None both when the id doesn't exist and when it belongs to
+        another owner — same no-ownership-probing rule as FileRepository."""
+        record = await self._session.get(WallpaperRecord, wallpaper_id)
+        if record is None or record.owner_id != owner_id:
+            return None
+        return record
+
+    async def find_existing(
+        self, owner_id: str, name: str, size: int
+    ) -> WallpaperRecord | None:
+        """Backs the client's dedupe check — re-picking the same image in
+        the file picker should reuse the stored copy, not upload it again."""
+        stmt = select(WallpaperRecord).where(
+            WallpaperRecord.owner_id == owner_id,
+            WallpaperRecord.name == name,
+            WallpaperRecord.size == size,
+        )
+        result = await self._session.execute(stmt)
+        return result.scalars().first()
+
+    async def create(
+        self, *, owner_id: str, name: str, storage_key: str, size: int
+    ) -> WallpaperRecord:
+        record = WallpaperRecord(
+            owner_id=owner_id, name=name, storage_key=storage_key, size=size
+        )
+        self._session.add(record)
+        await self._session.flush()  # populate record.id for the caller
+        return record
+
+    async def set_active(
+        self, owner_id: str, wallpaper_id: str
+    ) -> WallpaperRecord | None:
+        """Marks one wallpaper active and clears every other row for this
+        owner in the same transaction, so "at most one is_set per owner"
+        can't be broken by a partially applied update."""
+        target = await self.get_by_id(owner_id, wallpaper_id)
+        if target is None:
+            return None
+        for record in await self.list_for_owner(owner_id):
+            record.is_set = record.id == wallpaper_id
+        return target

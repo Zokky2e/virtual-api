@@ -56,6 +56,9 @@ app/
     shared.py             -> /desktop/shared/* — mirrors folders.py+files.py+
                               streaming.py, but scoped to SHARED_OWNER_ID
                               instead of the caller's own uid
+    wallpapers.py         -> /desktop/wallpapers/* — desktop wallpapers, which
+                              are NOT file-tree items: own table, own storage
+                              prefix, no WebSocket events
     websocket.py          -> /ws (outside the /desktop REST prefix)
     dependencies.py       # FastAPI Depends() providers: get_folder_service, etc.
   auth/
@@ -64,14 +67,16 @@ app/
     models.py            # AuthUser
   database/
     database.py          # engine/session setup, init_db()
-    models.py             # SQLAlchemy models (FileRecord, etc.)
-    repositories.py       # DB-level CRUD used by services/
+    models.py             # SQLAlchemy models (FileRecord, WallpaperRecord)
+    repositories.py       # DB-level CRUD used by services/ (FileRepository,
+                          #   WallpaperRepository)
     migrations/
   services/               # business logic layer — routers depend on these, not on
                             # database/ or storage/ directly
     folder_service.py
     file_service.py
     stream_service.py
+    wallpaper_service.py      # wallpaper upload/list/select + range streaming
     notification_service.py   # WebSocket broadcast wrapper used by other services
     reconcile_service.py      # scans storage_root/users/<owner>/ for files with
                                 # no DB record yet (out-of-band drops via scp etc.)
@@ -151,13 +156,30 @@ DELETE /desktop/file/{item_id}                 # soft delete
 /desktop/shared/*        # same shape as above, scoped to SHARED_OWNER_ID
 POST   /desktop/shared/sync                    # reconciliation import
 
+GET    /desktop/wallpapers                     # this user's wallpapers
+POST   /desktop/wallpapers/upload
+GET    /desktop/wallpapers/stream/{id}         # HTTP Range aware
+GET    /desktop/wallpapers/{id}
+PATCH  /desktop/wallpapers/{id}/active         # single-selection, clears the rest
+
 WS     /ws                                     # outside the /desktop prefix
 ```
 
-Every item response matches the same `FileResponse` schema regardless of
-which namespace served it — the Flutter client's mapper is shared between
-personal and shared trees, so don't introduce a shape difference between
-`/desktop/*` and `/desktop/shared/*` for the same resource type.
+Every *file-tree item* response matches the same `FileResponse` schema
+regardless of which namespace served it — the Flutter client's mapper is
+shared between personal and shared trees, so don't introduce a shape
+difference between `/desktop/*` and `/desktop/shared/*` for the same
+resource type.
+
+**Wallpapers are the one deliberate exception**, and are not a file tree.
+They have their own table (`wallpapers`), their own schema
+(`WallpaperResponse`), and — critically — their own storage prefix
+`wallpapers/{owner_id}/` rather than `users/{owner_id}/`. That prefix is
+what keeps `ReconcileService` from sweeping them into the file tree on the
+next `POST /desktop/shared/sync`, so don't move wallpaper bytes under
+`users/`. They also emit no WebSocket events: nothing in the file tree
+changes when a wallpaper is uploaded, and pushing one would make every open
+desktop re-list for a change it can't see.
 
 ## Browser-compatible video streaming (planned/partial — verify current state before assuming it's done)
 

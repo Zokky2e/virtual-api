@@ -9,6 +9,7 @@ together.
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from functools import lru_cache
 
 from fastapi import Depends
@@ -85,11 +86,27 @@ def get_transfer_service(
     return TransferService(repo, storage)
 
 
-def get_notification_service() -> NotificationService:
+async def get_notification_service(
+    session: AsyncSession = Depends(get_session),
+) -> AsyncIterator[NotificationService]:
+    """Holds the request's events until its transaction has committed —
+    see NotificationService for why they can't go out any sooner.
+
+    FastAPI tears yield dependencies down in reverse order, so this one
+    finishes before get_session does. It therefore commits for itself
+    rather than waiting on get_session's commit, which would land after
+    the events. Getting past `yield` means the endpoint returned normally;
+    if it raised (or the commit does), nothing is sent and get_session
+    rolls the transaction back.
+    """
     # connection_manager is a process-wide singleton (see
-    # websocket/manager.py) — every request shares the same one, unlike
-    # get_file_repository which is fresh per-request.
-    return NotificationService(connection_manager)
+    # websocket/manager.py) — every request shares the same one. The
+    # NotificationService around it is per-request, since it holds that
+    # request's events.
+    notifications = NotificationService(connection_manager)
+    yield notifications
+    await session.commit()
+    await notifications.flush()
 
 def get_reconcile_service(
     repo: FileRepository = Depends(get_file_repository),

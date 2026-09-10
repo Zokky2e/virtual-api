@@ -150,6 +150,9 @@ DELETE /desktop/file/{item_id}                 # soft delete
 
 /desktop/shared/*        # same shape as above, scoped to SHARED_OWNER_ID
 POST   /desktop/shared/sync                    # reconciliation import
+GET    /desktop/shared/recycle-bin             # shared tree's own bin
+POST   /desktop/shared/recycle-bin/{id}/restore
+DELETE /desktop/shared/recycle-bin/{id}        # hard delete
 
 WS     /ws                                     # outside the /desktop prefix
 ```

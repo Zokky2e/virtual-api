@@ -210,3 +210,48 @@ async def sync_shared_storage(
 			"folder_created" if record.is_folder else "file_created", record
 		)
     return [FileResponse.model_validate(r) for r in records]
+
+@router.get("/recycle-bin", response_model=list[FileResponse])
+async def list_shared_recycle_bin(
+    _: AuthUser = Depends(get_current_user),
+    folders: FolderService = Depends(get_folder_service),
+) -> list[FileResponse]:
+    """The shared tree's recycle bin.
+
+    Without this, DELETE /desktop/shared/file/{id} soft-deleted under
+    owner_id = SHARED_OWNER_ID and the item became unreachable: the
+    client's Recycle Bin only ever listed /desktop/recycle-bin, which is
+    scoped to the caller's own uid. The confirm dialog promised a recycle
+    bin that did not exist for that tree.
+    """
+    items = await folders.list_deleted(SHARED_OWNER_ID)
+    return [FileResponse.model_validate(i) for i in items]
+
+
+@router.post(
+    "/recycle-bin/{item_id}/restore", status_code=status.HTTP_204_NO_CONTENT
+)
+async def restore_shared_item(
+    item_id: str,
+    _: AuthUser = Depends(get_current_user),
+    folders: FolderService = Depends(get_folder_service),
+    notifications: NotificationService = Depends(get_notification_service),
+) -> None:
+    await folders.restore(SHARED_OWNER_ID, item_id)
+    record = await folders.get_item(SHARED_OWNER_ID, item_id)
+    # broadcast_all, not a per-uid broadcast: every signed-in user is
+    # looking at the same shared tree, so they all need the refresh.
+    await notifications.shared_item_changed(
+        "folder_restored" if record.is_folder else "file_restored", record
+    )
+
+
+@router.delete("/recycle-bin/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def purge_shared_item(
+    item_id: str,
+    _: AuthUser = Depends(get_current_user),
+    folders: FolderService = Depends(get_folder_service),
+) -> None:
+    """Permanent delete — the "Delete Forever" action, mirroring
+    DELETE /desktop/recycle-bin/{id} in api/folders.py."""
+    await folders.hard_delete(SHARED_OWNER_ID, item_id)

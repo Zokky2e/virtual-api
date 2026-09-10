@@ -10,6 +10,7 @@ the DB and disk.
 
 from __future__ import annotations
 
+from app.constants import SHARED_OWNER_ID
 from app.database.models import FileRecord
 from app.websocket.events import build_event
 from app.websocket.manager import ConnectionManager
@@ -93,4 +94,42 @@ class NotificationService:
                 parent_folder_id=record.parent_folder_id,
                 owner_id=record.owner_id,
             )
+        )
+
+    async def _broadcast_to_tree(self, owner_id: str, payload: dict) -> None:
+        """Personal trees reach one user's sockets; the shared tree reaches
+        everyone, because everyone is looking at it."""
+        if owner_id == SHARED_OWNER_ID:
+            await self._manager.broadcast_all(payload)
+        else:
+            await self._manager.broadcast(owner_id, payload)
+
+    async def item_entered_tree(self, owner_id: str, record: FileRecord) -> None:
+        """A cross-tree transfer looks like a create to the destination."""
+        event = "folder_created" if record.is_folder else "file_created"
+        await self._broadcast_to_tree(
+            owner_id,
+            build_event(
+                event,
+                item_id=record.id,
+                parent_folder_id=record.parent_folder_id,
+                owner_id=owner_id,
+            ),
+        )
+
+    async def item_left_tree(
+        self, owner_id: str, record: FileRecord, parent_folder_id: str | None
+    ) -> None:
+        """...and like a delete to the source. The record's own
+        parent_folder_id already points at the destination by the time
+        this runs, so the old one is passed in."""
+        event = "folder_deleted" if record.is_folder else "file_deleted"
+        await self._broadcast_to_tree(
+            owner_id,
+            build_event(
+                event,
+                item_id=record.id,
+                parent_folder_id=parent_folder_id,
+                owner_id=owner_id,
+            ),
         )

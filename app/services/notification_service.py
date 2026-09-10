@@ -23,14 +23,24 @@ class NotificationService:
         event = "folder_created" if record.is_folder else "file_created"
         await self._manager.broadcast(
             owner_id,
-            build_event(event, item_id=record.id, parent_folder_id=record.parent_folder_id),
+            build_event(
+                event,
+                item_id=record.id,
+                parent_folder_id=record.parent_folder_id,
+                owner_id=record.owner_id,
+            ),
         )
 
     async def item_renamed(self, owner_id: str, record: FileRecord) -> None:
         event = "folder_renamed" if record.is_folder else "file_renamed"
         await self._manager.broadcast(
             owner_id,
-            build_event(event, item_id=record.id, parent_folder_id=record.parent_folder_id),
+            build_event(
+                event,
+                item_id=record.id,
+                parent_folder_id=record.parent_folder_id,
+                owner_id=record.owner_id,
+            ),
         )
 
     async def item_moved(
@@ -43,6 +53,7 @@ class NotificationService:
                 event,
                 item_id=record.id,
                 parent_folder_id=record.parent_folder_id,
+                owner_id=record.owner_id,
                 old_parent_folder_id=old_parent_folder_id,
             ),
         )
@@ -51,14 +62,24 @@ class NotificationService:
         event = "folder_deleted" if record.is_folder else "file_deleted"
         await self._manager.broadcast(
             owner_id,
-            build_event(event, item_id=record.id, parent_folder_id=record.parent_folder_id),
+            build_event(
+                event,
+                item_id=record.id,
+                parent_folder_id=record.parent_folder_id,
+                owner_id=record.owner_id,
+            ),
         )
 
     async def item_restored(self, owner_id: str, record: FileRecord) -> None:
         event = "folder_restored" if record.is_folder else "file_restored"
         await self._manager.broadcast(
             owner_id,
-            build_event(event, item_id=record.id, parent_folder_id=record.parent_folder_id),
+            build_event(
+                event,
+                item_id=record.id,
+                parent_folder_id=record.parent_folder_id,
+                owner_id=record.owner_id,
+            ),
         )
 
     async def shared_item_changed(self, event: str, record: "FileRecord") -> None:
@@ -66,5 +87,10 @@ class NotificationService:
         broadcasts to all connected users, not just SHARED_OWNER_ID's own
         (nonexistent) sockets."""
         await self._manager.broadcast_all(
-            build_event(event, item_id=record.id, parent_folder_id=record.parent_folder_id)
+            build_event(
+                event,
+                item_id=record.id,
+                parent_folder_id=record.parent_folder_id,
+                owner_id=record.owner_id,
+            )
         )

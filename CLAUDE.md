@@ -128,7 +128,13 @@ scripts/
   owner-prefixed, and `ReconcileService` treats any file under
   `users/<owner>/` that isn't in that owner's recorded keys as untracked. Move
   a row to another owner without moving its bytes and the next sync mints a
-  duplicate record for the orphan. `scripts/check_transfer.py` covers this.
+  duplicate record for the orphan. It relocates them with
+  `StorageRepository.move` — a rename on local disk, so a 4 GB film moves as
+  fast as a thumbnail — never copy-then-delete, which rewrote every byte. New
+  keys come from `TransferService._free_key`: the scheme is only
+  millisecond-precise, so same-named files moved back to back would
+  otherwise share a key and overwrite each other.
+  `scripts/check_transfer.py` covers all of this.
 - **Streaming is `open_range()` + `StreamingResponse`, never full-file
   reads for video/audio.** `storage.open_range(key, start, end)` must stay
   an async generator so multi-GB files are never loaded into memory.

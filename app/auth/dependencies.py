@@ -14,6 +14,8 @@ from starlette.concurrency import run_in_threadpool
 
 from app.auth.firebase import TokenVerificationError, verify_id_token
 from app.auth.models import AuthUser
+from app.auth.stream_token import StreamTokenError
+from app.auth.stream_token import verify as verify_stream_token
 
 _bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -76,3 +78,30 @@ async def get_current_user_header_or_query(
         email=claims.get("email"),
         email_verified=claims.get("email_verified", False),
     )
+
+
+async def get_stream_caller(
+    item_id: str,
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme),
+    token: str | None = Query(default=None),
+) -> str:
+    """
+    Owner id for a streaming request, accepting either credential.
+
+    A stream token is preferred: it is scoped to this one item and lives
+    long enough to outlast a film (see auth/stream_token.py). A Firebase
+    ID token still works, so a client that hasn't been updated keeps
+    playing — it just keeps the old one-hour ceiling.
+
+    `item_id` comes from the path of whichever route depends on this.
+    """
+    if token:
+        try:
+            return verify_stream_token(token, item_id)
+        except StreamTokenError:
+            # Not a stream token (or not one for this item) — it may still
+            # be a Firebase ID token, so fall through rather than 401 here.
+            pass
+
+    user = await get_current_user_header_or_query(credentials, token)
+    return user.uid

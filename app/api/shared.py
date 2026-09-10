@@ -27,7 +27,14 @@ from app.api.dependencies import (
     get_reconcile_service,
     get_stream_service,
 )
-from app.auth.dependencies import get_current_user, get_current_user_header_or_query
+from app.auth.dependencies import (
+    get_current_user,
+    get_current_user_header_or_query,
+    get_stream_caller,
+)
+from app.auth.stream_token import mint as mint_stream_token
+from app.config import get_settings
+from app.schemas.stream import StreamTokenResponse
 from app.auth.models import AuthUser
 from app.constants import SHARED_OWNER_ID
 from app.schemas.file import FileResponse
@@ -132,11 +139,30 @@ async def download_shared_file(
     )
 
 
+@router.get("/stream-token/{item_id}", response_model=StreamTokenResponse)
+async def issue_shared_stream_token(
+    item_id: str,
+    _: AuthUser = Depends(get_current_user),
+    folders: FolderService = Depends(get_folder_service),
+) -> StreamTokenResponse:
+    """Same as the personal /stream-token, minted against SHARED_OWNER_ID.
+    get_item raises 404 if the id isn't in the shared tree, so a caller
+    can't mint a shared token for a personal item."""
+    await folders.get_item(SHARED_OWNER_ID, item_id)
+    token, expires_at = mint_stream_token(
+        SHARED_OWNER_ID, item_id, get_settings().stream_token_ttl_seconds
+    )
+    return StreamTokenResponse(token=token, expires_at=expires_at)
+
+
 @router.get("/stream/{item_id}")
 async def stream_shared_file(
     item_id: str,
     request: Request,
-    _: AuthUser = Depends(get_current_user_header_or_query),
+    # Accepts a stream token as well as a Firebase ID token. The owner it
+    # resolves to is ignored: everything under this router is scoped to
+    # SHARED_OWNER_ID, and any authenticated user may read the shared tree.
+    _: str = Depends(get_stream_caller),
     stream_service: StreamService = Depends(get_stream_service),
 ) -> StreamingResponse:
     range_header = request.headers.get("range")
